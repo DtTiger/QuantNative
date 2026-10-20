@@ -1,0 +1,138 @@
+name: build
+
+# 构建 Windows 单文件 exe，可选签名。
+#
+# 产物下载：Actions 运行页面底部的 Artifacts → QuantNative-exe
+# 打 v* 标签时同时上传到 Release（含 SHA256 校验文件）。
+#
+# 签名开关：配好下面的 secret 就会自动签名，不配则构建未签名版（功能一样，
+# 但用户首次运行可能看到 SmartScreen 提示，原因见 README「分发与签名」）。
+#   A) Azure Artifact Signing（前身 Trusted Signing）
+#        AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET
+#        AZURE_SIGNING_ENDPOINT / AZURE_SIGNING_ACCOUNT / AZURE_SIGNING_PROFILE
+#   B) 证书文件（.pfx / 云 HSM 导出）
+#        SIGN_PFX_BASE64 / SIGN_PFX_PASSWORD
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+      AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
+      SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+      SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build
+        run: dotnet build src/QuantNative/QuantNative.csproj -c Release --nologo
+
+      # ── 签名（可选）──
+      # 说明：CA/B Forum 自 2023-06 起要求 OV 证书私钥存放在 HSM/USB 令牌里，
+      # 所以「拿一个 pfx 在 CI 里签」这条路现在多数 CA 已不提供，
+      # 下面两个分支保留，按你实际拿到的证书形态选一个。
+
+      - name: Sign with Azure Artifact Signing
+        if: env.AZURE_SIGNING_ENDPOINT != '' && env.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          # 官方 CLI：包名是 sign（Azure.CodeSigning 已废弃）。
+          # 具体参数以 learn.microsoft.com/azure/trusted-signing 当前文档为准。
+          dotnet tool install -g --prerelease sign
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          sign code artifact-signing `
+            --timestamp-url http://timestamp.acs.microsoft.com `
+            --artifact-signing-endpoint "$env:AZURE_SIGNING_ENDPOINT" `
+            --artifact-signing-account "$env:AZURE_SIGNING_ACCOUNT" `
+            --artifact-signing-certificate-profile "$env:AZURE_SIGNING_PROFILE" `
+            src/QuantNative/bin/Release/QuantNative.exe
+
+      - name: Sign with certificate file
+        if: env.SIGN_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe not found' }
+          & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:SIGN_PFX_PASSWORD `
+            /tr http://timestamp.digicert.com /td SHA256 `
+            src/QuantNative/bin/Release/QuantNative.exe
+
+      - name: Show signature status
+        shell: pwsh
+        run: |
+          $exe = 'src/QuantNative/bin/Release/QuantNative.exe'
+          if (-not (Test-Path $exe)) { throw "构建产物不存在: $exe" }
+          $sig = Get-AuthenticodeSignature $exe
+          Write-Host "size      : $([math]::Round((Get-Item $exe).Length / 1KB, 1)) KB"
+          Write-Host "signature : $($sig.Status)"
+          if ($sig.SignerCertificate) { Write-Host "publisher : $($sig.SignerCertificate.Subject)" }
+          else { Write-Host "publisher : (未签名)" }
+
+      - name: Make checksum
+        shell: pwsh
+        run: |
+          $exe = 'src/QuantNative/bin/Release/QuantNative.exe'
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
+          "$hash  QuantNative.exe" | Out-File -Encoding ascii src/QuantNative/bin/Release/QuantNative.exe.sha256
+          Write-Host "SHA256 = $hash"
+
+      - name: Require trusted signature before release
+        if: startsWith(github.ref, 'refs/tags/v') || env.AZURE_SIGNING_ENDPOINT != '' || env.SIGN_PFX_BASE64 != ''
+        shell: pwsh
+        run: ./verify-distribution.ps1 -Exe src/QuantNative/bin/Release/QuantNative.exe
+
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuantNative-exe
+          path: |
+            src/QuantNative/bin/Release/QuantNative.exe
+            src/QuantNative/bin/Release/QuantNative.exe.sha256
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src/QuantNative/bin/Release/QuantNative.exe
+            src/QuantNative/bin/Release/QuantNative.exe.sha256
+          body: |
+            QuantNative ${{ github.ref_name }}
+
+            单文件 exe，双击即用，不需要安装任何运行时（Windows 10 1903+ / Windows 11）。
+
+            This release passed the trusted-signature gate. New signed files can still trigger SmartScreen reputation warnings.
+
+            ### 校验下载
+
+            下载后的 QuantNative.exe 应与此文件里的 SHA256 一致：
+
+                Get-FileHash QuantNative.exe -Algorithm SHA256
+
+            期望值见 QuantNative.exe.sha256。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

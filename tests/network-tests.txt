@@ -1,0 +1,7 @@
+PASS Sina quote: 贵州茅台 1243.88
+PASS Tencent quote: 贵州茅台 1243.88
+PASS Tencent indices: count=7
+PASS Fund search: count=2 of005844 东方人工智能主题混合A
+PASS Fund realtime: 东方人工智能主题混合A 3.2231 估值 16:13
+PASS Fund daily history: bars=30 last=2026-09-24
+Network failures: 0

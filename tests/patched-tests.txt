@@ -1,0 +1,15 @@
+Assembly: C:\Users\Admin\Documents\Codex\2026-09-28\zhe\work\patched\QuantNative.exe
+PASS Search preserves unrelated same-number fund
+PASS ETF duplicate suppressed
+PASS Holdings URL contains code parameter
+PASS Holdings exclude older reporting periods
+PASS Unpublished NAV refreshes within five minutes
+PASS Official fund return survives dividend NAV drop
+PASS Index failure preserves successful stock quote
+PASS Fund fallback routes by instrument
+PASS Old detail response cannot repaint new selection
+PASS Window construction, six themes, ticker preferences
+PASS Watchlist source persists across reload
+PASS Saved watchlist appears on initial main window
+PASS Empty fund depth can be rendered
+Failures: 0

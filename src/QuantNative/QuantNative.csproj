@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    QuantNative
+
+    构建：
+      dotnet build -c Release
+      msbuild /p:Configuration=Release
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>QuantNative</AssemblyName>
+    <RootNamespace>QuantNative</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <LangVersion>7.3</LangVersion>
+    <Version>2.6.0-review</Version>
+    <AssemblyTitle>QuantNative 实时行情</AssemblyTitle>
+    <Product>QuantNative</Product>
+    <Company>Leaderxin</Company>
+    <Copyright>© 2026 Leaderxin</Copyright>
+    <NeutralLanguage>zh-CN</NeutralLanguage>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Deterministic>true</Deterministic>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- 单文件化：DebugType=none 去掉 pdb，DebugSymbols 关掉，产物只剩一个 exe -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      只用于「无 VS / 无 .NET Framework 开发包」的机器上编译 net48：
+      该包提供 net48 的引用程序集，让 dotnet build 不必依赖本机安装的开发包。
+      PrivateAssets=all 保证它不会成为运行时依赖。
+    -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      .NET Framework 内置程序集，非 NuGet 依赖。
+      System.Web.Extensions：JavaScriptSerializer，用于解析行情 JSON。
+      System.Net.Http：HttpClient，用于行情与搜索接口请求。
+    -->
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+</Project>
+

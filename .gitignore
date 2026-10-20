@@ -1,0 +1,23 @@
+# 构建产物
+bin/
+obj/
+**/bin/
+**/obj/
+
+# 交付包与临时产物（由 build-local.ps1 生成，不进仓库）
+dist/
+work/
+*.exe
+*.pdb
+*.sha256
+ReviewAssemblyInfo.cs
+
+# 日志
+*.log
+
+# 编辑器 / 系统
+.vs/
+*.user
+*.suo
+Thumbs.db
+desktop.ini

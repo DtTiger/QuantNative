@@ -1,0 +1,16 @@
+Assembly: C:\Users\Admin\Documents\Codex\2026-09-28\zhe\work\original\QuantNative.exe
+FAIL Search preserves unrelated same-number fund: fund 000001 was incorrectly dropped for stock 000001
+PASS ETF duplicate suppressed
+FAIL Holdings URL contains code parameter: fund code is appended to rt instead of code
+FAIL Holdings exclude older reporting periods: multiple quarters counted together
+FAIL Unpublished NAV refreshes within five minutes: stale NAV remains cached for twelve hours
+FAIL Official fund return survives dividend NAV drop: dividend appears as -10% loss instead of official 0%
+FAIL Index failure preserves successful stock quote: successful quote lost due to index failure
+FAIL Fund fallback routes by instrument: legacy fund sent to stock provider
+FAIL Old detail response cannot repaint new selection: A data shown under B label or B load suppressed
+PASS Window construction, six themes, ticker preferences
+PASS Watchlist source persists across reload
+FAIL Saved watchlist appears on initial main window: startup grid empty until watchlist edited
+FAIL Empty fund depth can be rendered: 索引超出范围。必须为非负值并小于集合大小。
+参数名: index
+Failures: 10
