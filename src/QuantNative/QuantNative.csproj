@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     QuantNative
@@ -16,7 +16,7 @@
     <RootNamespace>QuantNative</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <LangVersion>7.3</LangVersion>
-    <Version>2.6.0-review</Version>
+    <Version>2.6.1-review</Version>
     <AssemblyTitle>QuantNative 实时行情</AssemblyTitle>
     <Product>QuantNative</Product>
     <Company>Leaderxin</Company>
@@ -57,4 +57,5 @@
   </ItemGroup>
 
 </Project>
+
 

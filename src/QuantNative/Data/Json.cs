@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
+using QuantNative.Core;
 
 namespace QuantNative.Data
 {
@@ -154,18 +155,26 @@ namespace QuantNative.Data
 
         private static int _uaIndex = -1;
 
-        private static readonly System.Net.Http.HttpClient Client = CreateClient();
-        private static readonly System.Net.Http.HttpClient ProxyClient = CreateProxyClient();
+        // 两条通道都留着：直连和系统代理。
+        // 2026-10-23 线上事故：这里原来是 UseProxy=false 硬编码直连，
+        // 用户那台机器必须走本地代理（127.0.0.1:10808）才能出网，
+        // 结果所有行情都是 10 秒超时（日志里全是「已取消一个任务」），界面一片空白。
+        // 现在按系统代理设置选首选通道，失败自动换另一条并记住。
+        private static readonly System.Net.Http.HttpClient ProxyClient = CreateClient(true);
+        private static readonly System.Net.Http.HttpClient DirectClient = CreateClient(false);
+        private static int _preferProxy = -1;   // -1 未定 / 1 系统代理 / 0 直连
 
         /// <summary>GBK（代码页 936）。新浪 / 腾讯的行情接口都是 GBK 编码。</summary>
         public static readonly System.Text.Encoding Gbk = System.Text.Encoding.GetEncoding(936);
 
-        private static System.Net.Http.HttpClient CreateClient()
+        private static System.Net.Http.HttpClient CreateClient(bool useProxy)
         {
+            // UseProxy=true 且 Proxy=null → 走 WebRequest.DefaultWebProxy（IE/系统代理，含 PAC）
             System.Net.Http.HttpClientHandler handler = new System.Net.Http.HttpClientHandler
             {
                 AutomaticDecompression = System.Net.DecompressionMethods.None,
-                UseProxy = false,
+                UseProxy = useProxy,
+                Proxy = null,
                 AllowAutoRedirect = true
             };
             System.Net.Http.HttpClient client = new System.Net.Http.HttpClient(handler);
@@ -174,13 +183,65 @@ namespace QuantNative.Data
             return client;
         }
 
-        private static System.Net.Http.HttpClient CreateProxyClient()
+        /// <summary>系统里到底配没配代理（ProxyEnable=1 或 PAC）。</summary>
+        private static bool SystemProxyConfigured(string url)
         {
-            var client = new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler {
-                AutomaticDecompression = System.Net.DecompressionMethods.None, UseProxy = true, AllowAutoRedirect = true
-            });
-            client.Timeout = TimeSpan.FromSeconds(10);
-            return client;
+            try
+            {
+                System.Net.IWebProxy proxy = System.Net.WebRequest.DefaultWebProxy;
+                if (proxy == null) return false;
+                Uri target = new Uri(url);
+                Uri routed = proxy.GetProxy(target);
+                return routed != null && !routed.Equals(target);
+            }
+            catch { return false; }
+        }
+
+        private static int Preference(string url)
+        {
+            int decided = System.Threading.Volatile.Read(ref _preferProxy);
+            if (decided >= 0) return decided;
+            int choice = SystemProxyConfigured(url) ? 1 : 0;
+            System.Threading.Interlocked.Exchange(ref _preferProxy, choice);
+            Log.Info("行情通道 → " + (choice == 1 ? "系统代理（" + DescribeProxy() + "）" : "直连"));
+            return choice;
+        }
+
+        private static string DescribeProxy()
+        {
+            try
+            {
+                Uri routed = System.Net.WebRequest.DefaultWebProxy.GetProxy(new Uri("https://qt.gtimg.cn/"));
+                return routed == null ? "未配置" : routed.Authority;
+            }
+            catch { return "未知"; }
+        }
+
+        private static void RememberChannel(int channel, Exception failed)
+        {
+            if (System.Threading.Interlocked.Exchange(ref _preferProxy, channel) != channel)
+            {
+                Log.Warn("行情通道切换 → " + (channel == 1 ? "系统代理" : "直连")
+                    + "（另一条失败: " + failed.Message + "）");
+            }
+        }
+
+        private static async System.Threading.Tasks.Task<byte[]> SendAsync(
+            System.Net.Http.HttpClient client, string url, string referer)
+        {
+            using (System.Net.Http.HttpRequestMessage request =
+                new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url))
+            {
+                request.Headers.TryAddWithoutValidation("User-Agent", NextUserAgent());
+                if (!string.IsNullOrEmpty(referer)) request.Headers.TryAddWithoutValidation("Referer", referer);
+                request.Headers.TryAddWithoutValidation("Connection", "keep-alive");
+
+                using (System.Net.Http.HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false))
+                {
+                    response.EnsureSuccessStatusCode();
+                    return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                }
+            }
         }
 
         private static string NextUserAgent()
@@ -191,7 +252,7 @@ namespace QuantNative.Data
             return UserAgents[index];
         }
 
-        /// <summary>取原始字节（GBK 接口用）。</summary>
+        /// <summary>取原始字节（GBK 接口用）。首选通道失败会自动换另一条再试一次。</summary>
         public static byte[] GetBytes(string url, string referer)
         {
             return GetBytesAsync(url, referer).GetAwaiter().GetResult();
@@ -199,17 +260,26 @@ namespace QuantNative.Data
 
         public static async System.Threading.Tasks.Task<byte[]> GetBytesAsync(string url, string referer)
         {
-            using (System.Net.Http.HttpRequestMessage request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url))
+            int first = Preference(url);
+            Exception firstError;
+            try
             {
-                request.Headers.TryAddWithoutValidation("User-Agent", NextUserAgent());
-                if (!string.IsNullOrEmpty(referer)) request.Headers.TryAddWithoutValidation("Referer", referer);
-                request.Headers.TryAddWithoutValidation("Connection", "keep-alive");
+                return await SendAsync(first == 1 ? ProxyClient : DirectClient, url, referer).ConfigureAwait(false);
+            }
+            catch (Exception ex) { firstError = ex; }
 
-                using (System.Net.Http.HttpResponseMessage response = await Client.SendAsync(request).ConfigureAwait(false))
-                {
-                    response.EnsureSuccessStatusCode();
-                    return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                }
+            int second = first == 1 ? 0 : 1;
+            try
+            {
+                byte[] bytes = await SendAsync(second == 1 ? ProxyClient : DirectClient, url, referer).ConfigureAwait(false);
+                RememberChannel(second, firstError);
+                return bytes;
+            }
+            catch (Exception secondError)
+            {
+                throw new InvalidOperationException(
+                    (first == 1 ? "代理" : "直连") + "失败: " + firstError.Message
+                    + "；" + (second == 1 ? "代理" : "直连") + "也失败: " + secondError.Message, secondError);
             }
         }
 

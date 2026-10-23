@@ -1,4 +1,4 @@
-param([switch]$Network)
+﻿param([switch]$Network)
 $ErrorActionPreference = 'Stop'
 $testDir = Join-Path $PSScriptRoot 'work\tests'
 & (Join-Path $PSScriptRoot 'build-local.ps1') -OutputDirectory $testDir

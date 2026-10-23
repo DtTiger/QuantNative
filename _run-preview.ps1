@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$PreviewDirectory = 'C:\Users\Admin\WorkBuddy\2026-09-28-18-53-38\preview'
 )
 $ErrorActionPreference = 'Stop'

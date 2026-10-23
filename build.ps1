@@ -1,4 +1,4 @@
-# QuantNative 一键构建脚本
+﻿# QuantNative 一键构建脚本
 #
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File build.ps1

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Exe)
+﻿param([Parameter(Mandatory=$true)][string]$Exe)
 $ErrorActionPreference = 'Stop'
 $sig = Get-AuthenticodeSignature -LiteralPath $Exe
 if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate) {

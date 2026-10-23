@@ -101,7 +101,7 @@ class UiPreview
             var chart = Field<ChartControl>(detail, "_chart");
             // 冻结详情页的自动加载：否则 DetailPanel 会在后台去拉板块分时/净值曲线
             // （离线环境里可能失败或覆盖掉这里塞的假数据），截图就不稳定了。
-            Value<Timer>(detail, "_timer").Stop();
+            Field<Timer>(detail, "_timer").Stop();
             SetField(detail, "_loading", true);
             var points = new List<MinutePoint>();
             for (int i = 0; i <= 120; i += 5)
